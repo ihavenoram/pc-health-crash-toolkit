@@ -1,0 +1,5 @@
+# Reports, collected logs and crash dumps describe a real PC.
+*.zip
+*.dmp
+*.json
+PCHealthToolkit/

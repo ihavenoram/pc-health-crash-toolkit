@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crash Incident Viewer</title>
+<style>
+:root {
+  --bg: #f4f6f9; --fg: #1b2230; --muted: #5b6474; --card: #ffffff; --card2: #f8f9fb; --border: #dde2ea;
+  --accent: #2563c9; --ok: #17804a; --warn: #a96300; --alert: #c02a2a; --violet: #6d4bc4; --teal: #0f7f86;
+  --ok-bg: #e5f4ec; --warn-bg: #fdf1dc; --alert-bg: #fbe4e4; --accent-bg: #e4ecfa; --chip: #edf0f5;
+  --mono: Consolas, "Cascadia Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --fg: #e3e8f0; --muted: #98a2b3; --card: #1a2029; --card2: #202734; --border: #2e3644;
+    --accent: #6fa0f0; --ok: #4cc485; --warn: #e7a73c; --alert: #f07070; --violet: #a68cf0; --teal: #4ec3c9;
+    --ok-bg: #173327; --warn-bg: #3a2c12; --alert-bg: #3d1c1c; --accent-bg: #1c2a44; --chip: #262e3b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --fg: #e3e8f0; --muted: #98a2b3; --card: #1a2029; --card2: #202734; --border: #2e3644;
+  --accent: #6fa0f0; --ok: #4cc485; --warn: #e7a73c; --alert: #f07070; --violet: #a68cf0; --teal: #4ec3c9;
+  --ok-bg: #173327; --warn-bg: #3a2c12; --alert-bg: #3d1c1c; --accent-bg: #1c2a44; --chip: #262e3b;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.savedbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; color: var(--muted); font-size: 12.5px; margin-bottom: 12px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--card); }
+header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+header .sub { color: var(--muted); font-size: 12.5px; }
+header .spacer { flex: 1; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.card h3 { font-size: 14px; margin: 14px 0 6px; }
+button { font: inherit; border: 1px solid var(--border); background: var(--card2); color: var(--fg); border-radius: 7px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:focus-visible, textarea:focus-visible, .tab:focus-visible, .ep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+textarea { width: 100%; min-height: 120px; resize: vertical; font: 12.5px/1.4 var(--mono); color: var(--fg); background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.hint { color: var(--muted); font-size: 12.5px; }
+.err { color: var(--alert); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+.drop { border: 2px dashed var(--accent); }
+#tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tab { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 6px 12px; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+.tab[aria-selected="true"] { border-color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.badge { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; letter-spacing: .02em; }
+.s-OK { color: var(--ok); background: var(--ok-bg); } .s-WARN { color: var(--warn); background: var(--warn-bg); } .s-ALERT { color: var(--alert); background: var(--alert-bg); }
+.verdict { border-left: 6px solid var(--muted); }
+.verdict.v-OK { border-left-color: var(--ok); } .verdict.v-WARN { border-left-color: var(--warn); } .verdict.v-ALERT { border-left-color: var(--alert); }
+.verdict .head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.verdict .host { font-size: 20px; font-weight: 650; }
+.verdict .headline { font-size: 15.5px; margin: 8px 0 4px; }
+.meta { color: var(--muted); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
+.flags { margin: 8px 0 0; padding-left: 18px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+dl.kv { display: grid; grid-template-columns: 130px 1fr; gap: 4px 12px; margin: 0; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; overflow-wrap: anywhere; }
+.caveat { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.chip { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 6px; background: var(--chip); color: var(--fg); white-space: nowrap; }
+.chip.t-ok { background: var(--ok-bg); color: var(--ok); } .chip.t-warn { background: var(--warn-bg); color: var(--warn); }
+.chip.t-alert { background: var(--alert-bg); color: var(--alert); } .chip.t-accent { background: var(--accent-bg); color: var(--accent); }
+ul.facts { margin: 4px 0 8px; padding-left: 18px; } ul.facts li { margin: 3px 0; }
+.lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-top: 12px; }
+.lbl.ok { color: var(--ok); } .lbl.no { color: var(--warn); } .lbl.ask { color: var(--accent); } .lbl.next { color: var(--violet); }
+.hyp { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 6px 0; background: var(--card2); }
+.hyp .ht { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.hyp ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.hyp li.f::marker { content: "+  "; color: var(--ok); } .hyp li.a::marker { content: "-  "; color: var(--alert); } .hyp li.g::marker { content: "?  "; color: var(--warn); }
+.h-supported { background: var(--accent-bg); color: var(--accent); } .h-weak { background: var(--chip); color: var(--muted); }
+.h-not-supported { background: var(--chip); color: var(--muted); text-decoration: line-through; } .h-cannot-assess { background: var(--warn-bg); color: var(--warn); }
+.eps { display: flex; flex-direction: column; gap: 6px; }
+.ep { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: var(--card2); }
+.ep[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.ep .n { font-weight: 700; color: var(--muted); }
+.ep .who { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.tl { width: 100%; height: auto; display: block; margin: 6px 0 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+.tbl { width: 100%; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; white-space: nowrap; }
+td.num, td.mono { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card2); }
+.tile .v { font-size: 20px; font-weight: 650; } .tile .k { color: var(--muted); font-size: 12px; }
+.tile.hot .v { color: var(--warn); }
+details summary { cursor: pointer; color: var(--muted); }
+pre.raw { font: 11.5px/1.4 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: .95; }
+.empty { color: var(--muted); font-style: italic; }
+@media (max-width: 600px) {
+  .wrap { padding: 10px; } dl.kv { grid-template-columns: 1fr; } dl.kv dt { margin-top: 6px; }
+  header { flex-wrap: wrap; }
+}
+@media print {
+  .no-print, #input, #tabs { display: none !important; }
+  body { background: #fff; color: #000; } .card { break-inside: avoid; border-color: #bbb; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Crash &amp; Shutdown Incident Viewer</h1>
+    <div class="sub">Renders output from System_Crash_And_Shutdown_Incident_Diagnostic.ps1. Runs entirely in this browser - nothing is uploaded.</div>
+  </div>
+  <div class="spacer"></div>
+  <button id="themeBtn" class="no-print" type="button" aria-label="Toggle light or dark theme">Theme</button>
+</header>
+
+<div class="wrap">
+  <section id="input" class="card" aria-label="Input">
+    <h2>Paste the Atera output</h2>
+    <textarea id="paste" spellcheck="false" placeholder="Paste the whole Atera script output (or just the JSON line). Several machines can be pasted at once."></textarea>
+    <div class="row">
+      <button id="renderBtn" class="primary" type="button">Render</button>
+      <button id="fileBtn" type="button">Open file...</button>
+      <input id="fileIn" type="file" accept=".txt,.json,.log" multiple hidden>
+      <button id="demoBtn" type="button">Load demo</button>
+      <button id="clearBtn" type="button">Clear</button>
+      <span class="hint">You can also drop .txt / .json files onto the box. Mangled (&lt;&lt;&gt;&gt;) and line-wrapped pastes are recovered.</span>
+    </div>
+    <div id="err" class="err" role="alert"></div>
+  </section>
+  <div id="savedbar" class="savedbar no-print" hidden></div>
+  <nav id="tabs" aria-label="Machines" role="tablist"></nav>
+  <main id="report"></main>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!--DEMO-BEGIN-->
+<script type="application/json" id="demo-data">[{"schema":"crashdiag/1","tool":"System_Crash_And_Shutdown_Incident_Diagnostic","ver":"1.0","host":"SHOP-POS02","os":"Windows 11 Pro 24H2 (build 10.0.26100)","ps":"5.1.26100.1","mode":"replay","generated":"2026-10-09T15:10:00+00:00","tz":"UTC","lastBoot":"2026-10-09T13:41:12+00:00","fastStartup":"on","params":{"lookbackDays":7,"historyDays":30,"windowBefore":15,"windowAfter":5,"incident":"2026-10-09T13:40:00+00:00"},"verdict":{"status":"OK","exit":0,"headline":"Controlled restart requested by RuntimeBroker.exe for SHOP-POS02\\POS02 at 2026-10-09 13:40:51 (interactive-shell); no crash or unclean-shutdown evidence.","incidentSev":0,"incidentWhy":[],"healthSev":0,"health":[],"focus":2,"transition":"controlled-restart","category":"interactive-shell"},"notes":[],"episodes":[{"id":1,"focus":false,"current":false,"t0":"2026-10-08T16:03:50+00:00","down":"2026-10-08T16:04:01+00:00","downSrc":"Kernel-General 13","boot":"2026-10-09T08:35:02+00:00","bootSrc":"Kernel-General 12","bootType":"","downtimeSec":59461,"type":"controlled-poweroff","typeLabel":"CONTROLLED POWER-OFF (request recorded, orderly shutdown)","typeConf":"high","unexplained":false,"initiator":{"src":"1074","at":"2026-10-08T16:03:50+00:00","process":"C:\\Windows\\System32\\RuntimeBroker.exe","name":"RuntimeBroker.exe","user":"SHOP-POS02\\POS02","action":"power off","reason":"Other (Unplanned)","code":"0x0","decoded":"Other (unplanned) - no reason supplied; Windows records this when a restart or shutdown is requested without a reason, including ordinary Start-menu restarts on client Windows","planned":false,"comment":"","category":"interactive-shell","label":"Interactive session action through the Windows shell (Start/power menu, notification or modern-app broker)","conf":"medium","caveat":"Names the shell process acting for the signed-in account. It does not prove a person chose Restart: an app or prompt in that session can route through the same broker.","delaySec":4},"kp41":null,"bug":null,"dumpFail":[],"dumps":[],"kp109":{"action":"Power off","reason":"Kernel API"},"lastAlive":{"t":"2026-10-08T16:04:01+00:00","prov":"Microsoft-Windows-Kernel-General","id":13},"sessions":[],"seq":[{"t":"2026-10-08T16:03:50+00:00","off":0,"ch":"Sys","prov":"User32","id":1074,"x":"power off requested by RuntimeBroker.exe for SHOP-POS02\\POS02 (reason 0x0)"},{"t":"2026-10-08T16:03:54+00:00","off":4,"ch":"Sys","prov":"EventLog","id":6006,"x":"Event Log service stopped (orderly shutdown)"},{"t":"2026-10-08T16:03:59+00:00","off":9,"ch":"Sys","prov":"Microsoft-Windows-Kernel-Power","id":109,"x":"Kernel power manager began the shutdown (Power off); reason: Kernel API"},{"t":"2026-10-08T16:04:01+00:00","off":11,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":13,"x":"Operating system shutting down"},{"t":"2026-10-09T08:35:02+00:00","off":59472,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":12,"x":"Operating system started"},{"t":"2026-10-09T08:35:13+00:00","off":59483,"ch":"Sys","prov":"EventLog","id":6005,"x":"Event Log service started"}],"corr":[],"hyp":[{"key":"interactive","label":"Action in the signed-in session (a person, or an app/prompt running in that session)","status":"supported","conf":"medium","for":["Requested through RuntimeBroker.exe (interactive-shell)","On behalf of a user account (SHOP-POS02\\POS02)"],"against":[],"gaps":["Microsoft-Windows-TerminalServices-LocalSessionManager/Operational state unknown"]},{"key":"scheduled-task","label":"Scheduled task","status":"cannot-assess","conf":"","for":[],"against":[],"gaps":["Microsoft-Windows-TaskScheduler/Operational is disabled (history off)"]},{"key":"windows-update","label":"Windows Update / servicing restart","status":"not-supported","conf":"","for":[],"against":["The recorded requester is RuntimeBroker.exe (interactive-shell) with a non-servicing reason","No Windows Update events within 15 min before the request (log readable)"],"gaps":[]}],"established":["Windows recorded a power off request at 2026-10-08 16:03:50 from C:\\Windows\\System32\\RuntimeBroker.exe on behalf of SHOP-POS02\\POS02 (reason 0x0: Other (unplanned) - no reason supplied; Windows records this when a restart or shutdown is requested without a reason, including ordinary Start-menu restarts on client Windows).","The shutdown completed in order (Event Log stopped, Kernel-Power 109, Kernel-General 13) and Windows started again at 2026-10-09 08:35:02 (16h 31m after the OS stopped).","No unclean-shutdown or bugcheck record (Kernel-Power 41, EventLog 6008, BugCheck 1001) exists for this transition."],"notEstablished":["What upstream action or component made RuntimeBroker.exe request it. Event 1074 records the requesting process and account, not a person or the original trigger.","Whether this is the interruption the client reported - no incident time was given; confirm the time with the client."],"ask":["Did the screen show \"Restarting\" / \"Shutting down\", or did it go black instantly?","Was anyone using the PC around 16:03:50? Did an app, update or prompt ask to restart?"],"next":["Ask staff whether a restart was chosen, or a restart prompt accepted, at 16:03:50 by SHOP-POS02\\POS02.","If nobody did: review software running in that session (POS/kiosk apps, update prompts, auto-logon shell) and enable attribution logging to catch a recurrence."]},{"id":2,"focus":true,"current":true,"t0":"2026-10-09T13:40:51+00:00","down":"2026-10-09T13:41:06+00:00","downSrc":"Kernel-General 13","boot":"2026-10-09T13:41:12+00:00","bootSrc":"Kernel-General 12","bootType":"","downtimeSec":6,"type":"controlled-restart","typeLabel":"CONTROLLED RESTART (request recorded, orderly shutdown)","typeConf":"high","unexplained":false,"initiator":{"src":"1074","at":"2026-10-09T13:40:51+00:00","process":"C:\\Windows\\System32\\RuntimeBroker.exe","name":"RuntimeBroker.exe","user":"SHOP-POS02\\POS02","action":"restart","reason":"Other (Unplanned)","code":"0x0","decoded":"Other (unplanned) - no reason supplied; Windows records this when a restart or shutdown is requested without a reason, including ordinary Start-menu restarts on client Windows","planned":false,"comment":"","category":"interactive-shell","label":"Interactive session action through the Windows shell (Start/power menu, notification or modern-app broker)","conf":"medium","caveat":"Names the shell process acting for the signed-in account. It does not prove a person chose Restart: an app or prompt in that session can route through the same broker.","delaySec":9},"kp41":null,"bug":null,"dumpFail":[],"dumps":[],"kp109":{"action":"Restart","reason":"Kernel API"},"lastAlive":{"t":"2026-10-09T13:41:06+00:00","prov":"Microsoft-Windows-Kernel-General","id":13},"sessions":[],"seq":[{"t":"2026-10-09T13:40:51+00:00","off":0,"ch":"Sys","prov":"User32","id":1074,"x":"restart requested by RuntimeBroker.exe for SHOP-POS02\\POS02 (reason 0x0)"},{"t":"2026-10-09T13:41:00+00:00","off":9,"ch":"Sys","prov":"EventLog","id":6006,"x":"Event Log service stopped (orderly shutdown)"},{"t":"2026-10-09T13:41:05+00:00","off":14,"ch":"Sys","prov":"Microsoft-Windows-Kernel-Power","id":109,"x":"Kernel power manager began the shutdown (Restart); reason: Kernel API"},{"t":"2026-10-09T13:41:06+00:00","off":15,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":13,"x":"Operating system shutting down"},{"t":"2026-10-09T13:41:12+00:00","off":21,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":12,"x":"Operating system started"},{"t":"2026-10-09T13:41:23+00:00","off":32,"ch":"Sys","prov":"EventLog","id":6005,"x":"Event Log service started"}],"corr":[{"t":"2026-10-09T13:42:04+00:00","off":73,"pos":"after-boot","ch":"WU","id":26,"tag":"wu-found","x":"Update scan found 12 update(s)"},{"t":"2026-10-09T13:42:16+00:00","off":85,"pos":"after-boot","ch":"WU","id":26,"tag":"wu-found","x":"Update scan found 2 update(s)"}],"hyp":[{"key":"interactive","label":"Action in the signed-in session (a person, or an app/prompt running in that session)","status":"supported","conf":"medium","for":["Requested through RuntimeBroker.exe (interactive-shell)","On behalf of a user account (SHOP-POS02\\POS02)"],"against":[],"gaps":["Microsoft-Windows-TerminalServices-LocalSessionManager/Operational state unknown"]},{"key":"scheduled-task","label":"Scheduled task","status":"cannot-assess","conf":"","for":[],"against":[],"gaps":["Microsoft-Windows-TaskScheduler/Operational is disabled (history off)"]},{"key":"windows-update","label":"Windows Update / servicing restart","status":"not-supported","conf":"","for":[],"against":["Windows Update activity in the window is only after the boot (first +1m 13s: Update scan found 12 update(s))","The recorded requester is RuntimeBroker.exe (interactive-shell) with a non-servicing reason"],"gaps":[]}],"established":["Windows recorded a restart request at 2026-10-09 13:40:51 from C:\\Windows\\System32\\RuntimeBroker.exe on behalf of SHOP-POS02\\POS02 (reason 0x0: Other (unplanned) - no reason supplied; Windows records this when a restart or shutdown is requested without a reason, including ordinary Start-menu restarts on client Windows).","The shutdown completed in order (Event Log stopped, Kernel-Power 109, Kernel-General 13) and Windows started again at 2026-10-09 13:41:12 (6s after the OS stopped).","No unclean-shutdown or bugcheck record (Kernel-Power 41, EventLog 6008, BugCheck 1001) exists for this transition."],"notEstablished":["What upstream action or component made RuntimeBroker.exe request it. Event 1074 records the requesting process and account, not a person or the original trigger."],"ask":["Did the screen show \"Restarting\" / \"Shutting down\", or did it go black instantly?","Was anyone using the PC around 13:40:51? Did an app, update or prompt ask to restart?"],"next":["Ask staff whether a restart was chosen, or a restart prompt accepted, at 13:40:51 by SHOP-POS02\\POS02.","If nobody did: review software running in that session (POS/kiosk apps, update prompts, auto-logon shell) and enable attribution logging to catch a recurrence."]}],"patterns":["2 of 2 transitions were requested by RuntimeBroker.exe / SHOP-POS02\\POS02: Thu 08 Oct 16:03 power off; Fri 09 Oct 13:40 restart"],"coverage":[{"log":"System","short":"Sys","state":"enabled","oldest":"2026-08-10T15:10:00+00:00","covers":true,"error":"","capped":false},{"log":"Application","short":"App","state":"enabled","oldest":"2026-08-10T15:10:00+00:00","covers":true,"error":"","capped":false},{"log":"Security","short":"Sec","state":"enabled","oldest":"2026-08-10T15:10:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-WindowsUpdateClient/Operational","short":"WU","state":"enabled","oldest":"2026-08-10T15:10:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TaskScheduler/Operational","short":"Task","state":"disabled","oldest":"2026-08-10T15:10:00+00:00","covers":null,"error":"","capped":false},{"log":"Microsoft-Windows-TerminalServices-LocalSessionManager/Operational","short":"LSM","state":"unknown","oldest":"2026-08-10T15:10:00+00:00","covers":null,"error":"not captured in fixlog","capped":false},{"log":"Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational","short":"RCM","state":"unknown","oldest":"2026-08-10T15:10:00+00:00","covers":null,"error":"not captured in fixlog","capped":false}],"cleared":[],"dumpCap":{"status":"OK","type":"Automatic","reasons":[]},"dumps":[{"name":"030823-9906-01.dmp","loc":"Minidump","written":"2023-03-08T17:15:38+00:00","ageDays":1310.9,"sizeMB":1.3,"bug":"","bugName":"","tag":"historical","episode":null},{"name":"MEMORY.DMP","loc":"MEMORY.DMP","written":"2023-03-08T17:15:14+00:00","ageDays":1310.9,"sizeMB":2025.5,"bug":"","bugName":"","tag":"historical","episode":null}],"health":{"days":30,"kp41":1,"bugchecks":0,"whea":0,"wheaFatalLookback":0,"storageResets":0,"diskErrors":0,"diskPredictive":0,"tdr":0,"liveKernel":0,"ntfs":0,"problemDevices":0,"devices":[],"appCrashes":1,"topApps":["FoxitPDFReader.exe x1"]},"attribution":{"taskHistory":"off","processAudit":"unknown","cmdLine":"unknown","changed":[],"notes":[]}},{"schema":"crashdiag/1","tool":"System_Crash_And_Shutdown_Incident_Diagnostic","ver":"1.0","host":"LAB-PC03","os":"Windows 11 Pro 24H2 (build 10.0.26100)","ps":"5.1.26100.1","mode":"replay","generated":"2026-10-12T11:00:00+00:00","tz":"UTC","lastBoot":"2026-10-12T10:17:05+00:00","fastStartup":"on","params":{"lookbackDays":7,"historyDays":30,"windowBefore":15,"windowAfter":5,"incident":null},"verdict":{"status":"ALERT","exit":2,"headline":"Windows crashed before the boot at 2026-10-12 10:17:05: 0x0000009F DRIVER_POWER_STATE_FAILURE (Driver).","incidentSev":2,"incidentWhy":["crash (bugcheck) in the incident transition"],"healthSev":0,"health":[],"focus":2,"transition":"unclean-bugcheck","category":null},"notes":[],"episodes":[{"id":1,"focus":false,"current":false,"t0":"2026-10-11T08:00:00+00:00","down":null,"downSrc":"","boot":"2026-10-11T08:00:00+00:00","bootSrc":"Kernel-General 12","bootType":"","downtimeSec":null,"type":"insufficient-evidence","typeLabel":"NOT ENOUGH EVIDENCE (no shutdown path recorded)","typeConf":"low","unexplained":true,"initiator":null,"kp41":null,"bug":null,"dumpFail":[],"dumps":[],"kp109":null,"lastAlive":null,"sessions":[],"seq":[{"t":"2026-10-11T08:00:00+00:00","off":0,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":12,"x":"Operating system started"},{"t":"2026-10-11T08:00:12+00:00","off":12,"ch":"Sys","prov":"EventLog","id":6005,"x":"Event Log service started"}],"corr":[],"hyp":[{"key":"windows-update","label":"Windows Update / servicing restart","status":"not-supported","conf":"","for":[],"against":["No Windows Update events within 15 min before the request (log readable)"],"gaps":[]},{"key":"scheduled-task","label":"Scheduled task","status":"not-supported","conf":"","for":[],"against":["Task Scheduler history is on and no task ran in the 10 minutes before the request"],"gaps":[]}],"established":["The boot at 2026-10-11 08:00:00 has no recorded shutdown path and no unclean-shutdown record before it."],"notEstablished":["How Windows went down before this boot.","Whether this is the interruption the client reported - no incident time was given; confirm the time with the client."],"ask":["What did the client see at the time (restart screen, black screen, freeze)?"],"next":["Increase the System log size (e.g. wevtutil sl System /ms:67108864) and enable attribution logging so the next event is captured."]},{"id":2,"focus":true,"current":true,"t0":"2026-10-12T10:15:20+00:00","down":"2026-10-12T10:15:20+00:00","downSrc":"last logged activity","boot":"2026-10-12T10:17:05+00:00","bootSrc":"Kernel-General 12","bootType":"","downtimeSec":105,"type":"unclean-bugcheck","typeLabel":"UNCLEAN - CRASH (BUGCHECK RECORDED)","typeConf":"high","unexplained":false,"initiator":null,"kp41":{"bugcheck":"0x0000009F","powerButton":false,"longPress":false,"sleep":false},"bug":{"code":"0x0000009F","name":"DRIVER_POWER_STATE_FAILURE","cat":"Driver","hint":"driver mishandled a sleep/resume/shutdown power transition","params":"0x3, 0xFFFFC004BEBAAC60, 0xFFFFF7FFFFFBF340, 0xFFFFC004BEBB8EF0","source":"Kernel-Power 41 + BugCheck 1001","dump":"C:\\Windows\\Minidump\\101226-12345-01.dmp"},"dumpFail":[],"dumps":["101226-12345-01.dmp"],"kp109":null,"lastAlive":{"t":"2026-10-12T10:15:20+00:00","prov":"Service Control Manager","id":7036},"sessions":[],"seq":[{"t":"2026-10-12T10:15:20+00:00","off":0,"ch":"Sys","prov":"Service Control Manager","id":7036,"x":"Last logged activity: Service Control Manager 7036: The Windows Update service entered the running state."},{"t":"2026-10-12T10:17:05+00:00","off":105,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":12,"x":"Operating system started"},{"t":"2026-10-12T10:17:10+00:00","off":110,"ch":"Sys","prov":"Microsoft-Windows-Kernel-Power","id":41,"x":"Rebooted without a clean shutdown (Kernel-Power 41): BugcheckCode 0x0000009F"},{"t":"2026-10-12T10:17:15+00:00","off":115,"ch":"Sys","prov":"EventLog","id":6008,"x":"Previous shutdown was unexpected (payload time 2026-10-12 10:15:21)"},{"t":"2026-10-12T10:17:16+00:00","off":116,"ch":"Sys","prov":"EventLog","id":6005,"x":"Event Log service started"},{"t":"2026-10-12T10:18:30+00:00","off":190,"ch":"Sys","prov":"Microsoft-Windows-WER-SystemErrorReporting","id":1001,"x":"Bugcheck recorded: 0x0000009F DRIVER_POWER_STATE_FAILURE"}],"corr":[],"hyp":[{"key":"kernel-crash","label":"Kernel crash (bugcheck)","status":"supported","conf":"high","for":["0x0000009F DRIVER_POWER_STATE_FAILURE recorded by Kernel-Power 41 + BugCheck 1001 - driver mishandled a sleep/resume/shutdown power transition","Matching dump on disk: 101226-12345-01.dmp"],"against":[],"gaps":[]},{"key":"windows-update","label":"Windows Update / servicing restart","status":"not-supported","conf":"","for":[],"against":["No Windows Update events within 15 min before the request (log readable)"],"gaps":[]},{"key":"scheduled-task","label":"Scheduled task","status":"not-supported","conf":"","for":[],"against":["Task Scheduler history is on and no task ran in the 10 minutes before the request"],"gaps":[]}],"established":["Windows crashed: bugcheck 0x0000009F DRIVER_POWER_STATE_FAILURE recorded by Kernel-Power 41 + BugCheck 1001 (parameters 0x3, 0xFFFFC004BEBAAC60, 0xFFFFF7FFFFFBF340, 0xFFFFC004BEBB8EF0).","Likely area: Driver - driver mishandled a sleep/resume/shutdown power transition.","A matching crash dump is on disk: 101226-12345-01.dmp."],"notEstablished":["Which driver or module faulted - that needs the dump analysed (WinDbg !analyze -v).","Whether this is the interruption the client reported - no incident time was given; confirm the time with the client."],"ask":["Did anyone see a blue screen or a \"Your PC ran into a problem\" message?"],"next":["Collect the dumps with Collect_Crash_Dump_Files_For_Analysis.ps1 and run !analyze -v.","Update or roll back recently changed drivers (GPU, storage, network, audio, chipset)."]}],"patterns":[],"coverage":[{"log":"System","short":"Sys","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Application","short":"App","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Security","short":"Sec","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-WindowsUpdateClient/Operational","short":"WU","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TaskScheduler/Operational","short":"Task","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TerminalServices-LocalSessionManager/Operational","short":"LSM","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational","short":"RCM","state":"enabled","oldest":"2026-08-13T11:00:00+00:00","covers":true,"error":"","capped":false}],"cleared":[],"dumpCap":{"status":"OK","type":"Automatic","reasons":[]},"dumps":[{"name":"101226-12345-01.dmp","loc":"Minidump","written":"2026-10-12T10:17:30+00:00","ageDays":0,"sizeMB":1.9,"bug":"0x0000009F","bugName":"DRIVER_POWER_STATE_FAILURE","tag":"matched","episode":2}],"health":{"days":30,"kp41":1,"bugchecks":1,"whea":0,"wheaFatalLookback":0,"storageResets":0,"diskErrors":0,"diskPredictive":0,"tdr":0,"liveKernel":0,"ntfs":0,"problemDevices":0,"devices":[],"appCrashes":0,"topApps":[]},"attribution":{"taskHistory":"on","processAudit":"unknown","cmdLine":"unknown","changed":[],"notes":[]}},{"schema":"crashdiag/1","tool":"System_Crash_And_Shutdown_Incident_Diagnostic","ver":"1.0","host":"SHOP-POS03","os":"Windows 11 Pro 24H2 (build 10.0.26100)","ps":"5.1.26100.1","mode":"replay","generated":"2026-10-14T13:00:00+00:00","tz":"UTC","lastBoot":"2026-10-14T12:35:20+00:00","fastStartup":"on","params":{"lookbackDays":7,"historyDays":30,"windowBefore":15,"windowAfter":5,"incident":null},"verdict":{"status":"WARN","exit":1,"headline":"The PC was switched off with the power button (unclean shutdown) before the boot at 2026-10-14 12:35:20.","incidentSev":1,"incidentWhy":["PC switched off with the power button"],"healthSev":0,"health":[],"focus":2,"transition":"unclean-powerbutton","category":null},"notes":[],"episodes":[{"id":1,"focus":false,"current":false,"t0":"2026-10-14T07:00:00+00:00","down":null,"downSrc":"","boot":"2026-10-14T07:00:00+00:00","bootSrc":"Kernel-General 12","bootType":"","downtimeSec":null,"type":"insufficient-evidence","typeLabel":"NOT ENOUGH EVIDENCE (no shutdown path recorded)","typeConf":"low","unexplained":true,"initiator":null,"kp41":null,"bug":null,"dumpFail":[],"dumps":[],"kp109":null,"lastAlive":null,"sessions":[],"seq":[{"t":"2026-10-14T07:00:00+00:00","off":0,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":12,"x":"Operating system started"},{"t":"2026-10-14T07:00:12+00:00","off":12,"ch":"Sys","prov":"EventLog","id":6005,"x":"Event Log service started"}],"corr":[],"hyp":[{"key":"windows-update","label":"Windows Update / servicing restart","status":"not-supported","conf":"","for":[],"against":["No Windows Update events within 15 min before the request (log readable)"],"gaps":[]},{"key":"scheduled-task","label":"Scheduled task","status":"not-supported","conf":"","for":[],"against":["Task Scheduler history is on and no task ran in the 10 minutes before the request"],"gaps":[]}],"established":["The boot at 2026-10-14 07:00:00 has no recorded shutdown path and no unclean-shutdown record before it."],"notEstablished":["How Windows went down before this boot.","Whether this is the interruption the client reported - no incident time was given; confirm the time with the client."],"ask":["What did the client see at the time (restart screen, black screen, freeze)?"],"next":["Increase the System log size (e.g. wevtutil sl System /ms:67108864) and enable attribution logging so the next event is captured."]},{"id":2,"focus":true,"current":true,"t0":"2026-10-14T12:33:40+00:00","down":"2026-10-14T12:33:40+00:00","downSrc":"last logged activity","boot":"2026-10-14T12:35:20+00:00","bootSrc":"Kernel-General 12","bootType":"","downtimeSec":100,"type":"unclean-powerbutton","typeLabel":"UNCLEAN - SWITCHED OFF WITH THE POWER BUTTON","typeConf":"high","unexplained":false,"initiator":null,"kp41":{"bugcheck":"0x00000000","powerButton":true,"longPress":true,"sleep":false},"bug":null,"dumpFail":[],"dumps":[],"kp109":null,"lastAlive":{"t":"2026-10-14T12:33:40+00:00","prov":"Service Control Manager","id":7036},"sessions":[],"seq":[{"t":"2026-10-14T12:33:40+00:00","off":0,"ch":"Sys","prov":"Service Control Manager","id":7036,"x":"Last logged activity: Service Control Manager 7036: The Print Spooler service entered the running state."},{"t":"2026-10-14T12:35:20+00:00","off":100,"ch":"Sys","prov":"Microsoft-Windows-Kernel-General","id":12,"x":"Operating system started"},{"t":"2026-10-14T12:35:24+00:00","off":104,"ch":"Sys","prov":"Microsoft-Windows-Kernel-Power","id":41,"x":"Rebooted without a clean shutdown (Kernel-Power 41): BugcheckCode 0, power-button press recorded, long press detected"},{"t":"2026-10-14T12:35:30+00:00","off":110,"ch":"Sys","prov":"EventLog","id":6005,"x":"Event Log service started"}],"corr":[{"t":"2026-10-14T12:31:10+00:00","off":-150,"pos":"before","ch":"App","id":1002,"tag":"app-hang","x":"Application stopped responding: POSApp.exe"}],"hyp":[{"key":"power-hang","label":"Power loss, hard hang or hardware reset","status":"supported","conf":"medium","for":["Power-button press recorded by Kernel-Power 41 (switched off by hand, usually after a freeze)"],"against":[],"gaps":[]},{"key":"fault-before","label":"Application, service or device fault shortly before","status":"supported","conf":"medium","for":["Application stopped responding: POSApp.exe at -2m 30s"],"against":[],"gaps":[]},{"key":"windows-update","label":"Windows Update / servicing restart","status":"not-supported","conf":"","for":[],"against":["No Windows Update events within 15 min before the request (log readable)"],"gaps":[]},{"key":"scheduled-task","label":"Scheduled task","status":"not-supported","conf":"","for":[],"against":["Task Scheduler history is on and no task ran in the 10 minutes before the request"],"gaps":[]}],"established":["Kernel-Power 41 at 2026-10-14 12:35:20 records a power-button press: the PC was switched off with the power button instead of shutting down (long press detected).","Last logged activity before that: 2026-10-14 12:33:40 (Service Control Manager 7036)."],"notEstablished":["Why it was switched off - most often because it had stopped responding.","Whether this is the interruption the client reported - no incident time was given; confirm the time with the client."],"ask":["Was the PC frozen or unresponsive before someone held the power button?"],"next":["Review events before the last logged activity (hangs, app errors, storage resets) and run the UI lag / responsiveness companion script."]}],"patterns":[],"coverage":[{"log":"System","short":"Sys","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Application","short":"App","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Security","short":"Sec","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-WindowsUpdateClient/Operational","short":"WU","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TaskScheduler/Operational","short":"Task","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TerminalServices-LocalSessionManager/Operational","short":"LSM","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false},{"log":"Microsoft-Windows-TerminalServices-RemoteConnectionManager/Operational","short":"RCM","state":"enabled","oldest":"2026-08-15T13:00:00+00:00","covers":true,"error":"","capped":false}],"cleared":[],"dumpCap":{"status":"OK","type":"Automatic","reasons":[]},"dumps":[],"health":{"days":30,"kp41":1,"bugchecks":0,"whea":0,"wheaFatalLookback":0,"storageResets":0,"diskErrors":0,"diskPredictive":0,"tdr":0,"liveKernel":0,"ntfs":0,"problemDevices":0,"devices":[],"appCrashes":1,"topApps":["POSApp.exe x1"]},"attribution":{"taskHistory":"on","processAudit":"unknown","cmdLine":"unknown","changed":[],"notes":[]}}]</script>
+<!--DEMO-END-->
+<!-- Filled in by "Save report": a saved copy opens straight into these reports. -->
+<script type="application/json" id="saved-data">[]</script>
+
+<script>
+(function () {
+  'use strict';
+
+  // The page's own markup before anything is rendered: "Save report" writes a copy of the viewer
+  // with the data embedded, so the saved file needs nothing else to open.
+  var PRISTINE = '<!doctype html>\n' + document.documentElement.outerHTML;
+
+  // ---------- tiny DOM helpers (data only ever goes in as text) ----------
+  function el(tag, props) {
+    var n = document.createElement(tag);
+    if (props) {
+      for (var k in props) {
+        if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
+        var v = props[k];
+        if (v === null || v === undefined || v === false) continue;
+        if (k === 'class') n.className = v;
+        else if (k === 'text') n.textContent = String(v);
+        else if (k === 'on') { for (var ev in v) n.addEventListener(ev, v[ev]); }
+        else n.setAttribute(k, String(v));
+      }
+    }
+    for (var i = 2; i < arguments.length; i++) add(n, arguments[i]);
+    return n;
+  }
+  function add(parent, kid) {
+    if (kid === null || kid === undefined || kid === false) return;
+    if (Array.isArray(kid)) { kid.forEach(function (k) { add(parent, k); }); return; }
+    if (typeof kid === 'string' || typeof kid === 'number') parent.appendChild(document.createTextNode(String(kid)));
+    else parent.appendChild(kid);
+  }
+  function svg(tag, attrs) {
+    var n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (var k in attrs) n.setAttribute(k, String(attrs[k]));
+    return n;
+  }
+  function arr(x) { return Array.isArray(x) ? x : (x === null || x === undefined ? [] : [x]); }
+  function str(x) { return x === null || x === undefined ? '' : String(x); }
+
+  // ---------- formatting (times stay in the endpoint's own clock) ----------
+  function fmtTime(iso) { return iso ? String(iso).replace('T', ' ').slice(0, 19) : ''; }
+  function fmtClock(iso) { return iso ? String(iso).slice(11, 19) : ''; }
+  function fmtSpan(sec) {
+    if (sec === null || sec === undefined || isNaN(sec)) return '?';
+    var neg = sec < 0, s = Math.abs(Math.round(sec)), r;
+    if (s < 60) r = s + 's';
+    else if (s < 3600) r = Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+    else if (s < 86400) r = Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+    else r = Math.floor(s / 86400) + 'd ' + Math.floor((s % 86400) / 3600) + 'h';
+    return (neg ? '-' : '') + r;
+  }
+  function fmtOff(sec) { return (sec >= 0 ? '+' : '') + fmtSpan(sec); }
+
+  var TYPE_TONE = { 'controlled-restart': 't-ok', 'controlled-poweroff': 't-ok', 'orderly-no-initiator': '', 'unclean-bugcheck': 't-alert',
+    'unclean-powerbutton': 't-warn', 'unclean-no-bugcheck': 't-warn', 'insufficient-evidence': '' };
+
+  // ---------- extraction from a pasted Atera log ----------
+  function tryParse(text) {
+    var t = str(text).trim();
+    if (!t) return null;
+    var attempts = [t, t.replace(/\r?\n/g, ''), t.replace(/\r?\n/g, ' ')];
+    var a = t.indexOf('{'), b = t.lastIndexOf('}');
+    if (a >= 0 && b > a) attempts.push(t.slice(a, b + 1).replace(/\r?\n/g, ''));
+    for (var i = 0; i < attempts.length; i++) {
+      try {
+        var o = JSON.parse(attempts[i]);
+        if (o && typeof o === 'object' && /^crashdiag\//.test(str(o.schema))) return o;
+      } catch (e) { /* next attempt */ }
+    }
+    return null;
+  }
+  function extract(raw) {
+    var found = [], notes = [];
+    var re = /(?:<<<|===)CRASHDIAG_JSON_BEGIN(?:>>>|===)\s*([\s\S]*?)\s*(?:<<<|===)CRASHDIAG_JSON_END(?:>>>|===)/g, m;
+    while ((m = re.exec(raw)) !== null) {
+      var o = tryParse(m[1]);
+      if (o) found.push(o); else notes.push('A marked JSON block could not be parsed (it may be truncated).');
+    }
+    // Markers mangled by the Atera output page (a copy shows only <<>>): the JSON is still one line
+    // carrying the schema. Scan outside intact blocks too, so a mixed paste keeps every machine.
+    var marked = found.length;
+    var outside = raw.replace(re, '\n');
+    var lines = outside.split(/\r?\n/), recovered = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (/"schema"\s*:\s*"crashdiag\//.test(lines[i])) {
+        var o2 = tryParse(lines[i]);
+        if (!o2) { // line-wrapped: glue following lines until it parses
+          var acc = lines[i];
+          for (var j = i + 1; j < lines.length && j < i + 400 && !o2; j++) { acc += lines[j]; o2 = tryParse(acc); if (o2) i = j; }
+        }
+        if (o2) { found.push(o2); recovered++; }
+      }
+    }
+    if (recovered) notes.push(marked ? ('Also recovered ' + recovered + ' block(s) whose markers were mangled.') : 'No intact markers - recovered the JSON from the pasted lines.');
+    if (!found.length) { var o3 = tryParse(raw); if (o3) found.push(o3); }
+    // de-duplicate identical runs (same host + generated time)
+    var seen = {}, out = [];
+    found.forEach(function (p) { var k = str(p.host) + '|' + str(p.generated); if (!seen[k]) { seen[k] = 1; out.push(p); } });
+    return { payloads: out, notes: notes };
+  }
+
+  // ---------- state ----------
+  var state = { payloads: [], cur: 0, sel: {} };
+
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove('on'); }, 1800);
+  }
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { toast('Copied'); }, function () { fallbackCopy(text); });
+    } else fallbackCopy(text);
+  }
+  function fallbackCopy(text) {
+    var ta = el('textarea', { style: 'position:fixed;left:-9999px' });
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('Copied'); } catch (e) { toast('Copy failed - select and copy manually'); }
+    document.body.removeChild(ta);
+  }
+
+  // ---------- render ----------
+  function renderAll() {
+    var tabs = document.getElementById('tabs'), rep = document.getElementById('report');
+    tabs.textContent = ''; rep.textContent = '';
+    if (!state.payloads.length) return;
+    state.payloads.forEach(function (p, i) {
+      var st = str(p.verdict && p.verdict.status) || '?';
+      var t = el('button', { class: 'tab', type: 'button', role: 'tab', 'aria-selected': i === state.cur ? 'true' : 'false',
+        on: { click: function () { state.cur = i; renderAll(); } } },
+        el('span', { class: 'badge s-' + st, text: st }), el('span', { text: str(p.host) || '(no host)' }));
+      tabs.appendChild(t);
+    });
+    if (state.payloads.length < 2) tabs.textContent = '';
+    renderHost(rep, state.payloads[state.cur]);
+  }
+
+  function focusEpisode(p) {
+    var eps = arr(p.episodes), id = state.sel[state.cur];
+    if (id !== undefined) { for (var i = 0; i < eps.length; i++) if (eps[i].id === id) return eps[i]; }
+    for (var j = 0; j < eps.length; j++) if (eps[j].focus) return eps[j];
+    return eps.length ? eps[eps.length - 1] : null;
+  }
+
+  function renderHost(root, p) {
+    var v = p.verdict || {}, st = str(v.status) || '?';
+    var ep = focusEpisode(p);
+
+    // Verdict
+    var vc = el('section', { class: 'card verdict v-' + st, 'aria-label': 'Verdict' },
+      el('div', { class: 'head' }, el('span', { class: 'host', text: str(p.host) }),
+        el('span', { class: 'badge s-' + st, text: st + ' (exit ' + str(v.exit) + ')' }),
+        el('span', { class: 'spacer' }),
+        el('button', { type: 'button', class: 'no-print primary', title: 'Download a single offline HTML file of this report', on: { click: function () { saveReport([p]); } } }, 'Save report'),
+        el('button', { type: 'button', class: 'no-print', on: { click: function () { window.print(); } } }, 'Print / PDF'),
+        el('button', { type: 'button', class: 'no-print', on: { click: function () { copyText(summaryText(p, focusEpisode(p))); } } }, 'Copy ticket summary'),
+        el('button', { type: 'button', class: 'no-print', on: { click: function () { copyText(JSON.stringify(p)); } } }, 'Copy JSON')),
+      el('div', { class: 'headline', text: str(v.headline) }),
+      el('div', { class: 'meta' },
+        el('span', { text: str(p.os) }), el('span', { text: 'Generated ' + fmtTime(p.generated) + ' (' + str(p.generated).slice(19) + ')' }),
+        p.lastBoot ? el('span', { text: 'Last boot ' + fmtTime(p.lastBoot) }) : null,
+        p.params && p.params.incident ? el('span', { text: 'Reported time ' + fmtTime(p.params.incident) }) : null,
+        el('span', { text: 'Mode ' + str(p.mode) + ', schema ' + str(p.schema) + ', tool ' + str(p.ver) })));
+    var fl = [];
+    arr(v.incidentWhy).forEach(function (x) { fl.push(el('li', { text: 'Incident: ' + x })); });
+    arr(v.health).forEach(function (x) { fl.push(el('li', { text: 'Health: ' + x })); });
+    arr(p.notes).forEach(function (x) { fl.push(el('li', { text: 'Note: ' + x })); });
+    if (fl.length) vc.appendChild(el('ul', { class: 'flags' }, fl));
+    root.appendChild(vc);
+
+    if (!ep) { root.appendChild(el('section', { class: 'card' }, el('p', { class: 'empty', text: 'No shutdown/startup transition in the lookback window.' }))); }
+    else {
+      root.appendChild(renderFocus(p, ep));
+      root.appendChild(renderTimelineCard(ep));
+    }
+    root.appendChild(renderEpisodes(p, ep));
+    var g = el('div', { class: 'grid2' });
+    g.appendChild(renderPatternsCoverage(p));
+    g.appendChild(renderHealth(p));
+    root.appendChild(g);
+    root.appendChild(renderDumps(p));
+    root.appendChild(el('section', { class: 'card no-print' }, el('details', null, el('summary', { text: 'Raw JSON' }),
+      el('pre', { class: 'raw', text: JSON.stringify(p, null, 2) }))));
+  }
+
+  function renderFocus(p, ep) {
+    var c = el('section', { class: 'card', 'aria-label': 'Transition story' });
+    c.appendChild(el('h2', { text: (ep.focus ? 'Incident focus' : 'Selected transition') + ' - #' + ep.id }));
+    var init = ep.initiator;
+    var kv = el('dl', { class: 'kv' });
+    function row(k, vnode) { kv.appendChild(el('dt', { text: k })); kv.appendChild(el('dd', null, vnode)); }
+    row('Transition', [el('span', { class: 'chip ' + (TYPE_TONE[ep.type] || ''), text: str(ep.typeLabel || ep.type) }), ' ',
+      el('span', { class: 'chip', text: 'confidence: ' + str(ep.typeConf) })]);
+    row('Went down', fmtTime(ep.t0) + (ep.downtimeSec !== null && ep.downtimeSec !== undefined ? '   (down ' + fmtSpan(ep.downtimeSec) + ', ' + str(ep.downSrc) + ' to boot)' : ''));
+    row('Booted', fmtTime(ep.boot) + (ep.bootType ? '  (' + ep.bootType + ')' : '') + (ep.current ? '  - current boot' : ''));
+    if (init) {
+      if (init.src === '1074') {
+        row('Requested by', [el('b', { text: str(init.name || init.process) }), ' on behalf of ', el('b', { text: str(init.user) }), ' (' + str(init.action) + ')',
+          el('div', { class: 'caveat', text: str(init.process) })]);
+        row('Reason', str(init.code) + '  "' + str(init.reason) + '" = ' + str(init.decoded));
+        if (init.comment) row('Comment', str(init.comment));
+      } else {
+        row('Requested by', 'No restart request (1074) recorded; Kernel-Power 109 reason "' + str(init.reason) + '"');
+      }
+      row('Initiator', [str(init.label) + ' ', el('span', { class: 'chip t-accent', text: str(init.category) }), ' ', el('span', { class: 'chip', text: 'confidence: ' + str(init.conf) }),
+        el('div', { class: 'caveat', text: 'Caveat: ' + str(init.caveat) })]);
+    } else row('Requested by', 'Nothing recorded');
+    var ss = arr(ep.sessions);
+    row('Sessions', ss.length ? ss.map(function (s) { return str(s.user) + ' (' + str(s.state) + ', ' + (s.via === 'rdp' ? 'RDP from ' + str(s.address) : 'console') + ')'; }).join('; ') : 'none recorded open at the time');
+    if (ep.bug) row('Bugcheck', [el('b', { text: str(ep.bug.code) + ' ' + str(ep.bug.name) }), ' - ' + str(ep.bug.cat) + ': ' + str(ep.bug.hint), el('div', { class: 'caveat', text: 'Source: ' + str(ep.bug.source) + (ep.bug.params ? '; parameters ' + ep.bug.params : '') })]);
+    if (arr(ep.dumpFail).length) row('Dump capture', arr(ep.dumpFail).join('; '));
+    c.appendChild(kv);
+
+    var g = el('div', { class: 'grid2' });
+    var left = el('div'), right = el('div');
+    left.appendChild(el('div', { class: 'lbl ok', text: 'Established' }));
+    left.appendChild(el('ul', { class: 'facts' }, arr(ep.established).map(function (x) { return el('li', { text: x }); })));
+    left.appendChild(el('div', { class: 'lbl no', text: 'Not established' }));
+    left.appendChild(el('ul', { class: 'facts' }, arr(ep.notEstablished).map(function (x) { return el('li', { text: x }); })));
+    right.appendChild(el('div', { class: 'lbl ask', text: 'Ask the client' }));
+    right.appendChild(el('ul', { class: 'facts' }, arr(ep.ask).map(function (x) { return el('li', { text: x }); })));
+    right.appendChild(el('div', { class: 'lbl next', text: 'Next steps' }));
+    right.appendChild(el('ul', { class: 'facts' }, arr(ep.next).map(function (x) { return el('li', { text: x }); })));
+    g.appendChild(left); g.appendChild(right);
+    c.appendChild(g);
+
+    var hyps = arr(ep.hyp);
+    c.appendChild(el('h3', { text: 'Explanations checked' }));
+    c.appendChild(el('div', { class: 'hint', text: 'Correlation in time, not proof of cause. "Cannot assess" means the log needed was off, missing or unreadable.' }));
+    if (!hyps.length) c.appendChild(el('p', { class: 'empty', text: 'No explanation had evidence for or against it.' }));
+    hyps.forEach(function (h) {
+      var items = [];
+      arr(h.for).forEach(function (x) { items.push(el('li', { class: 'f', text: x })); });
+      arr(h.against).forEach(function (x) { items.push(el('li', { class: 'a', text: x })); });
+      arr(h.gaps).forEach(function (x) { items.push(el('li', { class: 'g', text: 'cannot assess: ' + x })); });
+      c.appendChild(el('div', { class: 'hyp' },
+        el('div', { class: 'ht' }, el('span', { text: str(h.label) }),
+          el('span', { class: 'chip h-' + str(h.status), text: str(h.status).toUpperCase() + (h.conf ? ' (' + h.conf + ')' : '') })),
+        items.length ? el('ul', null, items) : null));
+    });
+    return c;
+  }
+
+  // ---------- timeline: sequence + correlations on a gap-compressed axis ----------
+  function seqKind(s) {
+    var p = str(s.prov), id = s.id;
+    if (p === 'User32') return 'request';
+    if ((p === 'EventLog' && id === 6006) || (p.indexOf('Kernel-General') >= 0 && id === 13) || (p.indexOf('Kernel-Power') >= 0 && id === 109)) return 'shutdown';
+    if ((p.indexOf('Kernel-General') >= 0 && id === 12) || (p === 'EventLog' && id === 6005) || p.indexOf('Kernel-Boot') >= 0) return 'boot';
+    if ((p.indexOf('Kernel-Power') >= 0 && id === 41) || (p === 'EventLog' && id === 6008) || p.indexOf('ErrorReporting') >= 0 || p === 'Windows Error Reporting') return 'crash';
+    if (p === 'volmgr') return 'dump';
+    return 'alive';
+  }
+  var KIND_COLOR = { request: 'var(--accent)', shutdown: 'var(--muted)', boot: 'var(--ok)', crash: 'var(--alert)', dump: 'var(--warn)', alive: 'var(--fg)' };
+  function corrColor(tag) {
+    tag = str(tag);
+    if (tag.indexOf('wu-') === 0) return 'var(--accent)';
+    if (tag.indexOf('task') === 0) return 'var(--violet)';
+    if (/^(session|logon|rdp|user-logoff|user-logon)/.test(tag)) return 'var(--teal)';
+    if (/^(installer|restartmgr)/.test(tag)) return 'var(--violet)';
+    if (/^(whea|thermal|storage-reset|log-cleared)/.test(tag)) return 'var(--alert)';
+    if (/^(app-|service-crash|livekernel|system-error|process-created)/.test(tag)) return 'var(--warn)';
+    return 'var(--muted)';
+  }
+
+  function renderTimelineCard(ep) {
+    var c = el('section', { class: 'card', 'aria-label': 'Timeline' });
+    c.appendChild(el('h2', { text: 'Timeline - #' + ep.id + ' (times relative to the request / shutdown start; long gaps compressed)' }));
+    var seq = arr(ep.seq), corr = arr(ep.corr);
+    var offs = seq.map(function (s) { return s.off; }).concat(corr.map(function (x) { return x.off; })).filter(function (x) { return typeof x === 'number'; });
+    if (offs.length) c.appendChild(drawTimeline(seq, corr, offs));
+    c.appendChild(el('div', { class: 'legend' },
+      ['request', 'shutdown', 'boot', 'crash', 'dump', 'alive'].map(function (k) { return el('span', { style: '--c:' + KIND_COLOR[k], text: k === 'alive' ? 'last activity' : k }); }),
+      el('span', { style: '--c:var(--violet)', text: 'task/installer' }), el('span', { style: '--c:var(--teal)', text: 'session' }),
+      el('span', { style: '--c:var(--warn)', text: 'fault' })));
+
+    c.appendChild(el('h3', { text: 'Sequence' }));
+    var t = el('table'), tb = el('tbody');
+    t.appendChild(el('thead', null, el('tr', null, el('th', { text: 'Offset' }), el('th', { text: 'Time' }), el('th', { text: 'Log' }), el('th', { text: 'Event' }), el('th', { text: 'What it shows' }))));
+    seq.forEach(function (s) {
+      tb.appendChild(el('tr', null, el('td', { class: 'num', text: fmtOff(s.off) }), el('td', { class: 'mono', text: fmtClock(s.t) }), el('td', { text: str(s.ch) }),
+        el('td', { class: 'mono', text: str(s.prov).replace('Microsoft-Windows-', '') + ' ' + str(s.id) }),
+        el('td', null, el('span', { class: 'chip', style: 'background:transparent;border:1px solid ' + KIND_COLOR[seqKind(s)], text: seqKind(s) }), ' ' + str(s.x))));
+    });
+    t.appendChild(tb);
+    c.appendChild(el('div', { class: 'tbl' }, t));
+
+    c.appendChild(el('h3', { text: 'Correlated events (time only)' }));
+    if (!corr.length) c.appendChild(el('p', { class: 'empty', text: 'Nothing relevant in the window (see log coverage below - an empty result only counts when the log was on).' }));
+    else {
+      var t2 = el('table'), tb2 = el('tbody');
+      t2.appendChild(el('thead', null, el('tr', null, el('th', { text: 'Offset' }), el('th', { text: 'Position' }), el('th', { text: 'Log' }), el('th', { text: 'Tag' }), el('th', { text: 'Detail' }))));
+      corr.forEach(function (x) {
+        var tone = x.pos === 'before' ? 't-warn' : (x.pos === 'after-boot' ? 't-accent' : '');
+        tb2.appendChild(el('tr', null, el('td', { class: 'num', text: fmtOff(x.off) }), el('td', null, el('span', { class: 'chip ' + tone, text: str(x.pos) })),
+          el('td', { text: str(x.ch) }), el('td', null, el('span', { class: 'chip', style: 'background:transparent;border:1px solid ' + corrColor(x.tag), text: str(x.tag) })), el('td', { text: str(x.x) })));
+      });
+      t2.appendChild(tb2);
+      c.appendChild(el('div', { class: 'tbl' }, t2));
+    }
+    return c;
+  }
+
+  function drawTimeline(seq, corr, offs) {
+    var pts = offs.slice().sort(function (a, b) { return a - b; }).filter(function (v, i, a) { return i === 0 || v !== a[i - 1]; });
+    var G = 90, vis = {}, acc = 0, breaks = [];
+    vis[pts[0]] = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var gap = pts[i] - pts[i - 1], v = gap <= G ? gap : G + Math.log(gap / G) / Math.LN10 * G * 1.5;
+      if (gap > 600) breaks.push({ at: acc + v / 2, gap: gap });
+      acc += v; vis[pts[i]] = acc;
+    }
+    // Draw at the real container width so text stays readable on narrow panes.
+    var rep = document.getElementById('report');
+    var W = Math.max(420, Math.min(1150, (rep && rep.clientWidth ? rep.clientWidth : 1000) - 36));
+    var H = 150, L = 24, R = 24, Y = 70, total = acc || 1;
+    function X(off) { return L + (vis[off] / total) * (W - L - R); }
+    var s = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'tl', role: 'img', 'aria-label': 'Timeline of the transition' });
+    var rows = []; // x ranges already used per label row
+    function placeLabel(cx, text, color) {
+      var w = text.length * 6.4 + 8, x0 = Math.min(Math.max(cx - w / 2, 2), W - w - 2), row = 0;
+      while (rows[row] && rows[row].some(function (r) { return x0 < r[1] && x0 + w > r[0]; })) row++;
+      (rows[row] = rows[row] || []).push([x0, x0 + w]);
+      var t = svg('text', { x: x0 + w / 2, y: Y + 34 + row * 14, 'text-anchor': 'middle', 'font-size': 11.5, fill: color });
+      t.textContent = text; s.appendChild(t);
+      if (row > 0 || Math.abs(x0 + w / 2 - cx) > 4) s.appendChild(svg('line', { x1: cx, y1: Y + 8, x2: x0 + w / 2, y2: Y + 23 + row * 14, stroke: color, 'stroke-width': 0.7, opacity: 0.6 }));
+    }
+    s.appendChild(svg('line', { x1: L, y1: Y, x2: W - R, y2: Y, stroke: 'var(--border)', 'stroke-width': 2 }));
+    breaks.forEach(function (b) {
+      var bx = L + (b.at / total) * (W - L - R);
+      s.appendChild(svg('rect', { x: bx - 6, y: Y - 8, width: 12, height: 16, fill: 'var(--card)' }));
+      s.appendChild(svg('line', { x1: bx - 5, y1: Y + 7, x2: bx - 1, y2: Y - 7, stroke: 'var(--muted)', 'stroke-width': 1.5 }));
+      s.appendChild(svg('line', { x1: bx + 1, y1: Y + 7, x2: bx + 5, y2: Y - 7, stroke: 'var(--muted)', 'stroke-width': 1.5 }));
+      var tt = svg('text', { x: bx, y: Y - 14, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--muted)' });
+      tt.textContent = fmtSpan(b.gap) + ' gap'; s.appendChild(tt);
+    });
+    var z = svg('line', { x1: X(0), y1: Y - 30, x2: X(0), y2: Y + 14, stroke: 'var(--accent)', 'stroke-dasharray': '3 3' });
+    if (vis[0] !== undefined) s.appendChild(z);
+    var lane = {};
+    corr.forEach(function (x) {
+      var cx = X(x.off), k = Math.round(cx / 6);
+      lane[k] = (lane[k] || 0) + 1;
+      var cy = Y - 18 - (lane[k] - 1) * 9;
+      var d = svg('path', { d: 'M' + cx + ' ' + (cy - 5) + ' L' + (cx + 5) + ' ' + cy + ' L' + cx + ' ' + (cy + 5) + ' L' + (cx - 5) + ' ' + cy + ' Z', fill: corrColor(x.tag), opacity: 0.85 });
+      var ti = svg('title', {}); ti.textContent = fmtOff(x.off) + '  ' + str(x.tag) + ': ' + str(x.x); d.appendChild(ti);
+      s.appendChild(d);
+    });
+    var labelled = {};
+    seq.forEach(function (q) {
+      var cx = X(q.off), kd = seqKind(q);
+      var c = svg('circle', { cx: cx, cy: Y, r: kd === 'request' || kd === 'crash' ? 7 : 5.5, fill: KIND_COLOR[kd], stroke: 'var(--card)', 'stroke-width': 2 });
+      var ti = svg('title', {}); ti.textContent = fmtOff(q.off) + '  ' + fmtClock(q.t) + '  ' + str(q.x); c.appendChild(ti);
+      s.appendChild(c);
+      // Label the first event of each key kind only (request, crash, boot, last activity)
+      var key = kd === 'boot' ? (/Kernel-General/.test(str(q.prov)) ? 'boot' : '') : kd;
+      if ((key === 'request' || key === 'crash' || key === 'boot' || key === 'alive') && !labelled[key]) {
+        labelled[key] = 1;
+        placeLabel(cx, ({ boot: 'boot ', alive: 'last activity ', crash: 'crash ', request: 'request ' })[key] + fmtClock(q.t), KIND_COLOR[kd]);
+      }
+    });
+    s.setAttribute('viewBox', '0 0 ' + W + ' ' + Math.max(H, Y + 46 + rows.length * 14));
+    return s;
+  }
+
+  function renderEpisodes(p, cur) {
+    var c = el('section', { class: 'card', 'aria-label': 'Transitions' });
+    var eps = arr(p.episodes);
+    c.appendChild(el('h2', { text: 'Transitions in the last ' + str(p.params && p.params.lookbackDays) + ' days (click to inspect)' }));
+    if (!eps.length) { c.appendChild(el('p', { class: 'empty', text: 'None found.' })); return c; }
+    var list = el('div', { class: 'eps' });
+    eps.slice().reverse().forEach(function (e) {
+      var who = e.initiator ? (e.initiator.src === '1074' ? str(e.initiator.name) + ' for ' + str(e.initiator.user) : str(e.initiator.label)) : 'no requester recorded';
+      var item = el('div', { class: 'ep', tabindex: '0', role: 'button', 'aria-current': cur && cur.id === e.id ? 'true' : 'false',
+        on: { click: function () { state.sel[state.cur] = e.id; renderAll(); window.scrollTo({ top: 0, behavior: 'smooth' }); },
+              keydown: function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); state.sel[state.cur] = e.id; renderAll(); } } } },
+        el('span', { class: 'n', text: '#' + e.id }),
+        el('div', null, el('div', null, el('span', { class: 'chip ' + (TYPE_TONE[e.type] || ''), text: str(e.type) }), ' ',
+          fmtTime(e.t0) + '  ->  boot ' + fmtTime(e.boot)), el('div', { class: 'who', text: who + (e.bug ? '  |  ' + e.bug.code + ' ' + e.bug.name : '') })),
+        el('div', null, el('span', { class: 'chip', text: 'down ' + fmtSpan(e.downtimeSec) }), e.focus ? el('span', { class: 'chip t-accent', text: 'focus' }) : null,
+          e.unexplained ? el('span', { class: 'chip t-warn', text: 'unexplained' }) : null));
+      list.appendChild(item);
+    });
+    c.appendChild(list);
+    return c;
+  }
+
+  function renderPatternsCoverage(p) {
+    var c = el('section', { class: 'card' });
+    c.appendChild(el('h2', { text: 'Patterns' }));
+    var pats = arr(p.patterns);
+    if (!pats.length) c.appendChild(el('p', { class: 'empty', text: 'No repeating pattern.' }));
+    else c.appendChild(el('ul', { class: 'facts' }, pats.map(function (x) { return el('li', { text: x }); })));
+    c.appendChild(el('h2', { text: 'Log coverage', style: 'margin-top:14px' }));
+    var t = el('table'), tb = el('tbody');
+    t.appendChild(el('thead', null, el('tr', null, el('th', { text: 'Log' }), el('th', { text: 'State' }), el('th', { text: 'Oldest record' }), el('th', { text: 'Window' }))));
+    arr(p.coverage).forEach(function (x) {
+      var tone = x.state === 'enabled' ? 't-ok' : (x.state === 'unknown' ? '' : 't-warn');
+      var w = x.covers === true ? 'covers' : (x.covers === false ? 'rolled over' : '-');
+      tb.appendChild(el('tr', { title: str(x.log) }, el('td', { text: str(x.short) }), el('td', null, el('span', { class: 'chip ' + tone, text: str(x.state) }), x.error ? el('div', { class: 'caveat', text: x.error }) : null),
+        el('td', { class: 'mono', text: x.state === 'enabled' ? fmtTime(x.oldest) : '-' }), el('td', { text: w + (x.capped ? ' (capped)' : '') })));
+    });
+    t.appendChild(tb);
+    c.appendChild(el('div', { class: 'tbl' }, t));
+    arr(p.cleared).forEach(function (x) { c.appendChild(el('p', { class: 'err', text: str(x.channel || 'A') + ' log cleared at ' + fmtTime(x.t) + (x.by ? ' by ' + x.by : '') + ' - evidence before then is gone.' })); });
+    return c;
+  }
+
+  function renderHealth(p) {
+    var h = p.health || {}, a = p.attribution || {};
+    var c = el('section', { class: 'card' });
+    c.appendChild(el('h2', { text: 'Background health - last ' + str(h.days) + ' days (does not change the incident verdict)' }));
+    var tiles = [['Unclean (KP41)', h.kp41], ['Bugchecks', h.bugchecks], ['WHEA', h.whea], ['Fatal WHEA (lookback)', h.wheaFatalLookback], ['Storage resets', h.storageResets],
+      ['Disk errors', h.diskErrors], ['GPU resets (TDR)', h.tdr], ['Live kernel reports', h.liveKernel], ['NTFS corruption', h.ntfs], ['Problem devices', h.problemDevices], ['App crashes (info)', h.appCrashes]];
+    c.appendChild(el('div', { class: 'tiles' }, tiles.map(function (t) {
+      var hot = Number(t[1]) > 0 && t[0] !== 'App crashes (info)';
+      return el('div', { class: 'tile' + (hot ? ' hot' : '') }, el('div', { class: 'v', text: str(t[1] === undefined ? '-' : t[1]) }), el('div', { class: 'k', text: t[0] }));
+    })));
+    if (arr(h.topApps).length) c.appendChild(el('p', { class: 'hint', text: 'Top crashing apps: ' + arr(h.topApps).join(', ') }));
+    arr(h.devices).forEach(function (d) { c.appendChild(el('p', { class: 'hint', text: 'Device problem: ' + str(d.name) + ' (code ' + str(d.code) + ')' })); });
+    c.appendChild(el('h2', { text: 'Attribution logging (for the next restart)', style: 'margin-top:14px' }));
+    var kv = el('dl', { class: 'kv' });
+    [['Task Scheduler history', a.taskHistory], ['Process creation audit', a.processAudit], ['Command line in 4688', a.cmdLine]].forEach(function (r) {
+      kv.appendChild(el('dt', { text: r[0] }));
+      kv.appendChild(el('dd', null, el('span', { class: 'chip ' + (r[1] === 'on' ? 't-ok' : 't-warn'), text: str(r[1]) })));
+    });
+    c.appendChild(kv);
+    arr(a.changed).forEach(function (x) { c.appendChild(el('p', { class: 'hint', text: 'Changed: ' + x })); });
+    arr(a.notes).forEach(function (x) { c.appendChild(el('p', { class: 'hint', text: x })); });
+    if (a.taskHistory !== 'on' || a.processAudit !== 'on' || a.cmdLine !== 'on')
+      c.appendChild(el('p', { class: 'hint', text: 'Re-run the script with -EnableAttributionLogging so a recurrence records the caller (Task Scheduler history, process creation with command lines).' }));
+    return c;
+  }
+
+  function renderDumps(p) {
+    var c = el('section', { class: 'card' });
+    var dc = p.dumpCap || {};
+    c.appendChild(el('h2', { text: 'Crash dumps (presence alone never raises the verdict)' }));
+    c.appendChild(el('p', null, 'Dump capture: ', el('span', { class: 'chip ' + (dc.status === 'OK' ? 't-ok' : 't-warn'), text: str(dc.status) }),
+      ' ' + str(dc.type) + (arr(dc.reasons).length ? ' - ' + arr(dc.reasons).join('; ') : '')));
+    var d = arr(p.dumps);
+    if (!d.length) { c.appendChild(el('p', { class: 'empty', text: 'No crash dump files on disk.' })); return c; }
+    var t = el('table'), tb = el('tbody');
+    t.appendChild(el('thead', null, el('tr', null, el('th', { text: 'File' }), el('th', { text: 'Written' }), el('th', { text: 'Age' }), el('th', { text: 'Size' }), el('th', { text: 'Bugcheck' }), el('th', { text: 'Freshness' }))));
+    d.forEach(function (x) {
+      var tag = x.tag === 'matched' ? 'matched to #' + x.episode : str(x.tag);
+      tb.appendChild(el('tr', null, el('td', { class: 'mono', text: str(x.name) }), el('td', { class: 'mono', text: fmtTime(x.written) }), el('td', { text: str(x.ageDays) + ' d' }),
+        el('td', { text: str(x.sizeMB) + ' MB' }), el('td', { text: (x.bug ? x.bug + ' ' + str(x.bugName) : '-') }),
+        el('td', null, el('span', { class: 'chip ' + (x.tag === 'matched' ? 't-alert' : (x.tag === 'historical' ? '' : 't-warn')), text: tag }))));
+    });
+    t.appendChild(tb);
+    c.appendChild(el('div', { class: 'tbl' }, t));
+    return c;
+  }
+
+  // ---------- save: a copy of this viewer with the report data embedded ----------
+  function esc(s) { return str(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function stamp(iso) { return str(iso).slice(0, 16).replace(/[-:]/g, '').replace('T', '_'); }
+  function buildSavedHtml(payloads) {
+    var data = { savedAt: new Date().toISOString(), payloads: payloads };
+    // Escaping "<" keeps the JSON from ever closing its script tag.
+    var json = JSON.stringify(data).replace(/</g, '\\u003c').replace(new RegExp(String.fromCharCode(0x2028), 'g'), '\\u2028').replace(new RegExp(String.fromCharCode(0x2029), 'g'), '\\u2029');
+    var host = payloads.length === 1 ? str(payloads[0].host) : payloads.length + ' machines';
+    var html = PRISTINE;
+    html = html.replace(/<script type="application\/json" id="saved-data">[\s\S]*?<\/script>/,
+      function () { return '<script type="application/json" id="saved-data">' + json + '</' + 'script>'; });
+    html = html.replace(/<script type="application\/json" id="demo-data">[\s\S]*?<\/script>/,
+      function () { return '<script type="application/json" id="demo-data">[]</' + 'script>'; });
+    html = html.replace(/<title>[\s\S]*?<\/title>/, function () { return '<title>Crash incident - ' + esc(host) + '</title>'; });
+    return html;
+  }
+  function saveReport(payloads) {
+    var p = payloads[0] || {};
+    var name = ('CrashIncident_' + (payloads.length === 1 ? str(p.host) : 'multiple') + '_' + stamp(p.generated)).replace(/[^A-Za-z0-9_.-]/g, '_') + '.html';
+    var blob = new Blob([buildSavedHtml(payloads)], { type: 'text/html;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = el('a', { href: url, download: name, style: 'display:none' });
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 1500);
+    toast('Saved ' + name);
+  }
+
+  // ---------- plain-text summary for tickets / Gemini ----------
+  function summaryText(p, ep) {
+    var v = p.verdict || {}, L = [];
+    L.push('Crash/shutdown diagnostic - ' + str(p.host) + ' - ' + fmtTime(p.generated));
+    L.push('Verdict: ' + str(v.status) + ' (exit ' + str(v.exit) + ') - ' + str(v.headline));
+    arr(v.incidentWhy).forEach(function (x) { L.push('  incident: ' + x); });
+    arr(v.health).forEach(function (x) { L.push('  health: ' + x); });
+    if (ep) {
+      L.push('');
+      L.push('Transition #' + ep.id + ': ' + str(ep.typeLabel || ep.type) + ' [confidence ' + str(ep.typeConf) + ']');
+      L.push('  went down ' + fmtTime(ep.t0) + ', booted ' + fmtTime(ep.boot) + ' (down ' + fmtSpan(ep.downtimeSec) + ')');
+      var i = ep.initiator;
+      if (i && i.src === '1074') {
+        L.push('  requested by ' + str(i.process) + ' on behalf of ' + str(i.user) + ' (' + str(i.action) + '), reason ' + str(i.code) + ' = ' + str(i.decoded));
+        L.push('  initiator: ' + str(i.label) + ' [' + str(i.category) + ', ' + str(i.conf) + ']');
+      } else if (i) L.push('  initiator: ' + str(i.label) + ' [' + str(i.category) + ']');
+      if (ep.bug) L.push('  bugcheck: ' + ep.bug.code + ' ' + ep.bug.name + ' - ' + ep.bug.hint);
+      L.push('Established:'); arr(ep.established).forEach(function (x) { L.push('  - ' + x); });
+      L.push('Not established:'); arr(ep.notEstablished).forEach(function (x) { L.push('  - ' + x); });
+      L.push('Explanations checked (correlation, not proof):');
+      arr(ep.hyp).forEach(function (h) { L.push('  - ' + h.label + ': ' + str(h.status).toUpperCase() + (h.conf ? ' (' + h.conf + ')' : '')); });
+      L.push('Ask the client:'); arr(ep.ask).forEach(function (x) { L.push('  - ' + x); });
+      L.push('Next steps:'); arr(ep.next).forEach(function (x) { L.push('  - ' + x); });
+    }
+    return L.join('\n');
+  }
+
+  // ---------- wiring ----------
+  function load(raw) {
+    var err = document.getElementById('err');
+    err.textContent = '';
+    var r = extract(str(raw));
+    if (!r.payloads.length) {
+      err.textContent = 'No crashdiag JSON found. Paste the whole Atera output (it ends with a ===CRASHDIAG_JSON_BEGIN=== line), or the JSON line on its own.' +
+        (r.notes.length ? '\n' + r.notes.join('\n') : '');
+      return;
+    }
+    state.payloads = r.payloads; state.cur = 0; state.sel = {};
+    if (r.notes.length) err.textContent = r.notes.join('\n');
+    renderAll();
+  }
+  var paste = document.getElementById('paste');
+  document.getElementById('renderBtn').addEventListener('click', function () { load(paste.value); });
+  document.getElementById('clearBtn').addEventListener('click', function () { paste.value = ''; state.payloads = []; renderAll(); document.getElementById('err').textContent = ''; });
+  document.getElementById('demoBtn').addEventListener('click', function () {
+    var demo = [];
+    try { demo = JSON.parse(document.getElementById('demo-data').textContent || '[]'); } catch (e) { demo = []; }
+    if (!demo.length) { document.getElementById('err').textContent = 'No demo data is embedded in this copy.'; return; }
+    paste.value = demo.map(function (d) { return 'Script execution summary (demo)\n...\n===CRASHDIAG_JSON_BEGIN===\n' + JSON.stringify(d) + '\n===CRASHDIAG_JSON_END===\n'; }).join('\n');
+    load(paste.value);
+  });
+  var fileIn = document.getElementById('fileIn');
+  document.getElementById('fileBtn').addEventListener('click', function () { fileIn.click(); });
+  function readFiles(files) {
+    var list = Array.prototype.slice.call(files || []), texts = [], left = list.length;
+    if (!left) return;
+    list.forEach(function (f, i) {
+      var rd = new FileReader();
+      rd.onload = function () { texts[i] = String(rd.result || ''); if (--left === 0) { paste.value = texts.join('\n'); load(paste.value); } };
+      rd.readAsText(f);
+    });
+  }
+  fileIn.addEventListener('change', function () { readFiles(fileIn.files); fileIn.value = ''; });
+  paste.addEventListener('dragover', function (e) { e.preventDefault(); paste.classList.add('drop'); });
+  paste.addEventListener('dragleave', function () { paste.classList.remove('drop'); });
+  paste.addEventListener('drop', function (e) { e.preventDefault(); paste.classList.remove('drop'); if (e.dataTransfer && e.dataTransfer.files.length) readFiles(e.dataTransfer.files); });
+  paste.addEventListener('paste', function () { setTimeout(function () { if (/CRASHDIAG_JSON|crashdiag\//.test(paste.value)) load(paste.value); }, 0); });
+
+  var themeBtn = document.getElementById('themeBtn');
+  try { var saved = localStorage.getItem('crashdiag-theme'); if (saved) document.documentElement.setAttribute('data-theme', saved); } catch (e) { /* no storage */ }
+  themeBtn.addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var dark = cur ? cur === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var next = dark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('crashdiag-theme', next); } catch (e) { /* no storage */ }
+  });
+
+  // A saved report opens straight into its data, with the paste box tucked away.
+  var saved = null;
+  try { saved = JSON.parse(document.getElementById('saved-data').textContent || '[]'); } catch (e) { saved = null; }
+  var savedPayloads = saved ? (Array.isArray(saved) ? saved : arr(saved.payloads)) : [];
+  if (savedPayloads.length) {
+    state.payloads = savedPayloads; state.cur = 0; state.sel = {};
+    document.getElementById('input').hidden = true;
+    var bar = document.getElementById('savedbar');
+    bar.hidden = false;
+    add(bar, [el('span', { text: 'Saved report' + (saved.savedAt ? ' - saved ' + fmtTime(saved.savedAt) + ' UTC' : '') + '. Everything shown is embedded in this file.' }),
+      el('button', { type: 'button', on: { click: function () { document.getElementById('input').hidden = false; bar.hidden = true; } } }, 'Paste other output...')]);
+    renderAll();
+  }
+
+  // test hook: lets an automated check feed text without UI clicks
+  window.__crashdiag = { load: load, extract: extract, state: state, buildSavedHtml: buildSavedHtml };
+  // Redraw (timeline width) when the window width changes noticeably
+  var lastW = window.innerWidth, rt = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(rt);
+    rt = setTimeout(function () { if (Math.abs(window.innerWidth - lastW) > 80 && state.payloads.length) { lastW = window.innerWidth; var y = window.scrollY; renderAll(); window.scrollTo(0, y); } }, 250);
+  });
+  // Crash_Incident_Viewer.html#demo opens straight into the demo (also used for screenshot tests)
+  if (location.hash === '#demo') document.getElementById('demoBtn').click();
+})();
+</script>
+</body>
+</html>
