@@ -192,17 +192,34 @@ if (-not $smartctlPath -and $NoSmartInstall) {
 }
 elseif (-not $smartctlPath) {
     Write-Host "`n[i] smartmontools missing. Starting headless install..." -ForegroundColor Yellow
-    Get-Process | Where-Object { $_.ProcessName -like 'smartmontools*' -or $_.ProcessName -like 'setup*' } |
+    # Only a stuck smartmontools installer from an earlier run (named smartmontools-setup-*).
+    Get-Process | Where-Object { $_.ProcessName -like 'smartmontools*' } |
         Stop-Process -Force -ErrorAction SilentlyContinue
     Set-Tls12
-    if (-not (Test-Path $StagingDir)) { New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null }
 
     $installerUrl  = 'https://github.com/smartmontools/smartmontools/releases/download/RELEASE_7_5/smartmontools-7.5.win32-setup.exe'
-    $installerPath = Join-Path $StagingDir "smartmontools-setup-$(Get-Random -Maximum 99999).exe"
+    # SHA-256 of that exact file. It was checked on 2026-10-24: the MD5 matched the
+    # release's published .md5, and the file carried a Valid Authenticode signature
+    # (SignPath Foundation). Anything else is deleted, never run.
+    $installerSha256 = '896337FCC253220614CF8CDBD5CF2321C5AA326A37A04160A672A281E6104C70'
+    # Elevated, download into %SystemRoot%\Temp under a fresh random name. Standard users
+    # can't change a file an administrator creates there, so nobody can swap it between
+    # the hash check and the run. (C:\temp lets any user modify what's in it.)
+    $dlDir = $StagingDir
+    $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($isElevated -and (Test-Path (Join-Path $env:SystemRoot 'Temp'))) { $dlDir = Join-Path $env:SystemRoot 'Temp' }
+    if (-not (Test-Path $dlDir)) { New-Item -ItemType Directory -Path $dlDir -Force | Out-Null }
+    $installerPath = Join-Path $dlDir ('smartmontools-setup-' + [guid]::NewGuid().ToString('N') + '.exe')
     try {
         Write-Host "[i] Downloading smartmontools..." -ForegroundColor Yellow
         Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -TimeoutSec 120
         if (-not (Test-Path $installerPath)) { throw "Download produced no file at $installerPath" }
+        $gotHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+        if ($gotHash -ne $installerSha256) {
+            Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+            throw "downloaded installer failed its SHA-256 check (got $gotHash) - deleted, not run"
+        }
+        Write-Host "[i] Installer SHA-256 verified." -ForegroundColor Cyan
         Unblock-File -Path $installerPath -ErrorAction SilentlyContinue
         $process = Start-Process -FilePath $installerPath -ArgumentList '/S /D=C:\Program Files\smartmontools' -PassThru -Wait
         Write-Host "[i] smartmontools installer exit code: $($process.ExitCode)" -ForegroundColor Cyan
