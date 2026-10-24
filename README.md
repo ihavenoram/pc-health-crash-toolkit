@@ -8,15 +8,15 @@ From [ihavenoram.com](https://ihavenoram.com): field notes for ADHD techs runnin
 
 ## Download
 
-Grab the latest zip from **[Releases](../../releases/latest)**. The SHA-256 checksum is in the release notes and in the `.sha256` file beside the zip:
+Grab **`pchealth.zip`** from **[Releases](../../releases/latest)**. It holds one folder, `pchealth\`, with only what runs: the scripts and a `.cmd` launcher for each. Copy that folder to the PC or server (for example `C:\temp\pchealth`); this README and the docs stay here on GitHub. The SHA-256 checksum is in the release notes and in the `.sha256` file beside the zip:
 
 ```powershell
-Get-FileHash .\PC-Health-Crash-Toolkit.zip -Algorithm SHA256
+Get-FileHash .\pchealth.zip -Algorithm SHA256
 ```
 
 ## Run it
 
-Unzip it anywhere (for example `C:\temp\PC-Health-Crash-Toolkit`) and double-click **`PC_Health_Crash_Toolkit.cmd`**. On a desktop it asks for elevation (UAC); several checks need it.
+Unzip it anywhere (for example `C:\temp\pchealth`) and double-click **`PC_Health_Crash_Toolkit.cmd`**. On a desktop it asks for elevation (UAC); several checks need it.
 
 **In ScreenConnect Backstage** it runs as SYSTEM and goes straight in: copy the folder over, run the `.cmd`, and work the problem without touching the user's screen.
 
@@ -53,7 +53,7 @@ Unzip it anywhere (for example `C:\temp\PC-Health-Crash-Toolkit`) and double-cli
 | `CPU_Thermal_Throttling_Diagnostic_Check.ps1` | Thermal throttling |
 | `Crash_Incident_Viewer.html` | The HTML crash report |
 
-Each script also runs on its own, for example as an RMM script: they were written that way first.
+Each check script also runs on its own, for example as an RMM script: they were written that way first. Each has its own **`Launch-<script>.cmd`** beside it, which asks for elevation (UAC) unless it's already elevated or running as SYSTEM, and waits for a key at the end so the output stays on screen (`/noelevate` and `/nopause` turn those off).
 
 ## Notes
 

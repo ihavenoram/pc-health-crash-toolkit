@@ -1,3 +1,5 @@
+# PC Health and Crash Toolkit 1.0.2 - https://ihavenoram.com - https://github.com/ihavenoram/pc-health-crash-toolkit
+# MIT licence, (c) 2026 ihavenoram.com. If you publish something built on this, please credit ihavenoram.com.
 <#
 =========================================================
 Script Name: CPU_Thermal_Throttling_Diagnostic_Check
